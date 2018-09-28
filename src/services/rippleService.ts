@@ -9,6 +9,11 @@ import { RippleAPI } from "ripple-lib";
 import { FormattedPaymentTransaction } from "ripple-lib/dist/npm/transaction/types";
 import { Amount } from "ripple-lib/dist/npm/common/types/objects";
 
+export interface ProcessedInterval {
+    lastProcessedLedger: number,
+    lastValidatedLedger: number
+}
+
 export class RippleService {
 
     private paramsRepository: ParamsRepository;
@@ -31,13 +36,13 @@ export class RippleService {
         });
     }
 
-    async handleActions(): Promise<number> {
+    async handleActions(): Promise<ProcessedInterval> {
         const params = await this.paramsRepository.get();
         const lastProcessedLedger = (params && params.LastProcessedLedger) || 0;
-        const lastClosedLedger = await this.api.getLedgerVersion();
+        const lastValidatedLedger = await this.api.getLedgerVersion();
         const history = await this.api.getTransactions(this.settings.RippleJob.HotWalletAddress, {
             minLedgerVersion: lastProcessedLedger,
-            maxLedgerVersion: lastClosedLedger
+            maxLedgerVersion: lastValidatedLedger
         });
 
         history.sort((a, b) => a.sequence - b.sequence);
@@ -82,11 +87,9 @@ export class RippleService {
                         await this.operationRepository.update(operationId, { completionTime: new Date(), blockTime, block });
                     } else {
                         await this.operationRepository.update(operationId, {
-                            failTime: new Date(),
+                            errorCode: ErrorCode.unknown,
                             error: tx.outcome.result,
-                            errorCode: tx.outcome.result == "tecEXPIRED"
-                                ? ErrorCode.buildingShouldBeRepeated
-                                : ErrorCode.unknown
+                            failTime: new Date()
                         });
                     }
                 } else {
@@ -135,36 +138,34 @@ export class RippleService {
             }
         }
 
-        return lastClosedLedger;
+        return {
+            lastProcessedLedger: lastProcessedLedger,
+            lastValidatedLedger: lastValidatedLedger
+        };
     }
 
-    async handleExpired(lastClosedLedger: number) {
+    async handleExpired(interval: ProcessedInterval) {
 
-        // use lastClosedLedger from handleActions() to not mark not yet processed transactions as expired
-
-        const params = await this.paramsRepository.get();
-        const lastProcessedLedger = (params && params.LastProcessedLedger) || 0;
-        const presumablyExpired = await this.operationRepository.geOperationIdByExpiration(lastProcessedLedger, lastClosedLedger);
+        // use interval of processed ledgers from handleActions() 
+        // to not mark not yet processed transactions as expired
+        const presumablyExpired = await this.operationRepository.geOperationIdByExpiration(
+            interval.lastProcessedLedger,
+            interval.lastValidatedLedger
+        );
 
         // mark expired operations as failed, if any
-
         for (let i = 0; i < presumablyExpired.length; i++) {
             const operation = await this.operationRepository.get(presumablyExpired[i])
             if (!!operation && !operation.isCompleted() && !operation.isFailed()) {
-                const operationId = operation.OperationId;
-
-                // mark operation as failed
-                await this.operationRepository.update(operationId, {
+                await this.operationRepository.update(operation.OperationId, {
                     errorCode: ErrorCode.buildingShouldBeRepeated,
                     error: "Transaction expired",
                     failTime: new Date()
                 });
-
-                // TODO: cancel balance changes?
             }
         }
 
-        // update state
-        await this.paramsRepository.upsert(lastClosedLedger);
+        // save last processed ledger number
+        await this.paramsRepository.upsert(interval.lastValidatedLedger);
     }
 }

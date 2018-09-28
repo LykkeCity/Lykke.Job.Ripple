@@ -1,6 +1,6 @@
 import Koa from "koa";
-import interval, { IIntervalPromiseOptions } from "interval-promise"
-import { loadSettings, Settings, APP_NAME, APP_VERSION, ENV_INFO, startAppInsights } from "./common";
+import interval from "interval-promise"
+import { loadSettings, APP_NAME, APP_VERSION, ENV_INFO, startAppInsights } from "./common";
 import { LogService, LogLevel } from "./services/logService";
 import { RippleService } from "./services/rippleService";
 
@@ -14,6 +14,7 @@ loadSettings()
         const log = new LogService(settings);
         const ripple = new RippleService(settings, log);
         const koa = new Koa();
+        let error: Error;
 
         // error handling middleware
 
@@ -48,7 +49,10 @@ loadSettings()
                 ctx.body = JSON.stringify({
                     name: APP_NAME,
                     version: APP_VERSION,
-                    env: ENV_INFO
+                    env: ENV_INFO,
+                    issueIndicators: !!error
+                        ? [{ type: error.name, value: error.message }]
+                        : []
                 });
             }
         });
@@ -62,10 +66,11 @@ loadSettings()
         const opts = { stopOnError: false };
         const func = async () => {
             try {
-                const lastClosedLedger = await ripple.handleActions();
-                await ripple.handleExpired(lastClosedLedger);
-            } catch (err) {
-                await log.write(LogLevel.error, RippleService.name, ripple.handleActions.name, err.message, undefined, err.name, err.stack);
+                const processedInterval = await ripple.handleActions();
+                await ripple.handleExpired(processedInterval);
+            } catch (e) {
+                await log.write(LogLevel.error, RippleService.name, ripple.handleActions.name, e.message, undefined, e.name, e.stack);
+                error = e;
             }
         };
 
