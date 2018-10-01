@@ -37,9 +37,22 @@ export class RippleService {
     }
 
     async handleActions(): Promise<ProcessedInterval> {
+        if (!this.api.isConnected()) {
+            await this.api.connect();
+        }
+
         const params = await this.paramsRepository.get();
         const lastProcessedLedger = (params && params.LastProcessedLedger) || 0;
         const lastValidatedLedger = await this.api.getLedgerVersion();
+        const serverInfo = await this.api.getServerInfo();
+        const availableHistory = serverInfo.completeLedgers.split(",").map(i => i.split("-"));
+        
+        // there are must be an available interval of ledger 
+        // history that contains our required interval
+        if (availableHistory.every(i => parseInt(i[0]) > lastProcessedLedger || parseInt(i[1]) < lastValidatedLedger)) {
+            throw new Error(`History for interval [${lastProcessedLedger}-${lastValidatedLedger}] is not available. Available history [${serverInfo.completeLedgers}].`);
+        }
+
         const history = await this.api.getTransactions(this.settings.RippleJob.HotWalletAddress, {
             minLedgerVersion: lastProcessedLedger,
             maxLedgerVersion: lastValidatedLedger
