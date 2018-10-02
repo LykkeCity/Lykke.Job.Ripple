@@ -38,8 +38,8 @@ export enum HistoryAddressCategory {
 
 export class HistoryRepository extends AzureRepository {
 
-    private historyTableName: string = "SteemHistory";
-    private historyByTxIdTableName: string = "SteemHistoryByTxId";
+    private historyTableName: string = "RippleHistory";
+    private historyByTxIdTableName: string = "RippleHistoryByTxId";
 
     constructor(private settings: Settings) {
         super(settings.RippleJob.Azure.ConnectionString);

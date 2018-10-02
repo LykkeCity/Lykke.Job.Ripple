@@ -11,8 +11,8 @@ export class BalanceEntity extends MongoEntity<{ Address: string, AssetId: strin
 
 export class BalanceRepository extends MongoRepository {
 
-    private addressCollectionName: string = "SteemBalanceAddresses";
-    private balanceCollectionName: string = "SteemBalances";
+    private addressCollectionName: string = "RippleBalanceAddresses";
+    private balanceCollectionName: string = "RippleBalances";
 
     constructor(settings: Settings) {
         super(

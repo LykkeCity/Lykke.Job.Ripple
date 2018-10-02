@@ -27,7 +27,7 @@ export class AssetEntity extends AzureEntity {
 
 export class AssetRepository extends AzureRepository {
 
-    private tableName: string = "SteemAssets";
+    private tableName: string = "RippleAssets";
 
     constructor(private settings: Settings) {
         super(settings.RippleJob.Azure.ConnectionString);
