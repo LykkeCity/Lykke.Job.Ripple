@@ -54,99 +54,106 @@ export class RippleService {
         }
 
         const history = await this.api.getTransactions(this.settings.RippleJob.HotWalletAddress, {
-            minLedgerVersion: lastProcessedLedger,
-            maxLedgerVersion: lastValidatedLedger
+            minLedgerVersion: lastProcessedLedger + 1,
+            maxLedgerVersion: lastValidatedLedger,
+            earliestFirst: true,
+            types: [
+                "payment"
+            ]
         });
 
-        history.sort((a, b) => a.sequence - b.sequence);
-
         for (const tx of history) {
-            const payment = tx.type.toLowerCase() == "payment" && tx as FormattedPaymentTransaction;
             const block = tx.outcome.ledgerVersion * 10;
             const blockTime = tx.outcome.timestamp && isoUTC(tx.outcome.timestamp) || new Date();
             const txId = tx.id;
 
-            await this.log(LogLevel.info, `${tx.type} transaction ${!!payment ? "detected" : "skipped"}`, {
-                Account: this.settings.RippleJob.HotWalletAddress,
-                Seq: tx.sequence
-            });
+            const operationId = await this.operationRepository.getOperationIdByTxId(txId);
+            if (!!operationId) {
 
-            if (!!payment) {
-                const operationId = await this.operationRepository.getOperationIdByTxId(txId);
-                if (!!operationId) {
+                await this.log(LogLevel.info, `Operation detected`, {
+                    operationId, tx
+                });
 
-                    // this is our operation, so use our data 
-                    // to record balance changes and history
+                // this is our operation, so use our data 
+                // to record balance changes and history
 
-                    if (tx.outcome.result == "tesSUCCESS") {
-                        const operation = await this.operationRepository.get(operationId);
+                if (tx.outcome.result == "tesSUCCESS") {
+                    const operation = await this.operationRepository.get(operationId);
+                    const balanceChanges = [
+                        { address: operation.FromAddress, affix: -operation.Amount, affixInBaseUnit: -operation.AmountInBaseUnit },
+                        { address: operation.ToAddress, affix: operation.Amount, affixInBaseUnit: operation.AmountInBaseUnit }
+                    ];
+
+                    for (const bc of balanceChanges) {
+                        await this.balanceRepository.upsert(bc.address, operation.AssetId, operationId, bc.affix, bc.affixInBaseUnit, block);
+                        await this.log(LogLevel.info, "Balance change recorded", {
+                            operationId, ...bc, assetId: operation.AssetId
+                        });
+                    }
+
+                    // upsert history of operation action
+                    await this.historyRepository.upsert(operation.FromAddress, operation.ToAddress, operation.AssetId,
+                        operation.Amount, operation.AmountInBaseUnit, block, blockTime, txId, operation.RowKey, operationId);
+
+                    // set operation state to completed
+                    await this.operationRepository.update(operationId, { completionTime: new Date(), blockTime, block });
+                    await this.log(LogLevel.info, "Operation completed", operationId);
+                } else {
+                    await this.operationRepository.update(operationId, { failTime: new Date(), error: tx.outcome.result, errorCode: ErrorCode.unknown });
+                    await this.log(LogLevel.warning, "Operation failed", {
+                        operationId, result: tx.outcome.result
+                    });
+                }
+            } else {
+
+                await this.log(LogLevel.info, `External transaction detected`, { tx });
+
+                // this is external transaction, so use blockchain 
+                // data to record balance changes and history
+
+                const payment = tx as FormattedPaymentTransaction;
+                const assetAmount = (payment.outcome as any).deliveredAmount as Amount;
+
+                if (!!assetAmount) {
+                    const asset = await this.assetRepository.get(assetAmount.currency);
+
+                    if (!!asset) {
+                        const assetId = asset.AssetId;
+                        const amount = parseFloat(assetAmount.value);
+                        const amountInBaseUnit = asset.toBaseUnit(amount);
+                        const from = !!payment.specification.source.tag
+                            ? payment.specification.source.address + ADDRESS_SEPARATOR + payment.specification.source.tag
+                            : payment.specification.source.address;
+                        const to = !!payment.specification.destination.tag
+                            ? payment.specification.destination.address + ADDRESS_SEPARATOR + payment.specification.destination.tag
+                            : payment.specification.destination.address;
+
+                        // record history
+                        await this.historyRepository.upsert(from, to, assetId, amount, amountInBaseUnit,
+                            block, blockTime, txId, operationId);
+
+                        // record balance changes;
+                        // actually source amount may be in another currency,
+                        // but we are interested in deliveries only
+                        
                         const balanceChanges = [
-                            { address: operation.FromAddress, affix: -operation.Amount, affixInBaseUnit: -operation.AmountInBaseUnit },
-                            { address: operation.ToAddress, affix: operation.Amount, affixInBaseUnit: operation.AmountInBaseUnit }
+                            { address: from, affix: -amount, affixInBaseUnit: -amountInBaseUnit },
+                            { address: to, affix: amount, affixInBaseUnit: amountInBaseUnit }
                         ];
 
                         for (const bc of balanceChanges) {
-                            await this.balanceRepository.upsert(bc.address, operation.AssetId, operationId, bc.affix, bc.affixInBaseUnit, block);
+                            await this.balanceRepository.upsert(bc.address, assetId, txId, bc.affix, bc.affixInBaseUnit, block);
                             await this.log(LogLevel.info, "Balance change recorded", {
-                                ...bc, assetId: operation.AssetId, txId
+                                txId, ...bc, assetId
                             });
                         }
 
-                        // upsert history of operation action
-                        await this.historyRepository.upsert(operation.FromAddress, operation.ToAddress, operation.AssetId,
-                            operation.Amount, operation.AmountInBaseUnit, block, blockTime, txId, operation.RowKey, operationId);
-
-                        // set operation state to completed
-                        await this.operationRepository.update(operationId, { completionTime: new Date(), blockTime, block });
+                        await this.log(LogLevel.info, "Transaction processed", txId);
                     } else {
-                        await this.operationRepository.update(operationId, {
-                            errorCode: ErrorCode.unknown,
-                            error: tx.outcome.result,
-                            failTime: new Date()
-                        });
+                        await this.log(LogLevel.warning, "Not tracked currency", assetAmount.currency);
                     }
                 } else {
-
-                    // this is external transaction, so use blockchain 
-                    // data to record balance changes and history
-
-                    const assetAmount = (payment.outcome as any).deliveredAmount as Amount;
-                    if (!!assetAmount) {
-                        const asset = await this.assetRepository.get(assetAmount.currency);
-                        if (!!asset) {
-                            const assetId = asset.AssetId;
-                            const amount = parseFloat(assetAmount.value);
-                            const amountInBaseUnit = asset.toBaseUnit(amount);
-                            const from = !!payment.specification.source.tag
-                                ? payment.specification.source.address + ADDRESS_SEPARATOR + payment.specification.source.tag
-                                : payment.specification.source.address;
-                            const to = !!payment.specification.destination.tag
-                                ? payment.specification.destination.address + ADDRESS_SEPARATOR + payment.specification.destination.tag
-                                : payment.specification.destination.address;
-
-                            // record history
-                            await this.historyRepository.upsert(from, to, assetId, amount, amountInBaseUnit, block, blockTime, txId, operationId);
-                            await this.log(LogLevel.info, "Payment recorded", payment);
-
-                            // record balance changes;
-                            // actually source amount may be in another currency,
-                            // but we are interested in deliveries only
-                            const balanceChanges = [
-                                { address: from, affix: -amount, affixInBaseUnit: -amountInBaseUnit },
-                                { address: to, affix: amount, affixInBaseUnit: amountInBaseUnit }
-                            ];
-                            for (const bc of balanceChanges) {
-                                await this.balanceRepository.upsert(bc.address, assetId, txId, bc.affix, bc.affixInBaseUnit, block);
-                                await this.log(LogLevel.info, "Balance change recorded", {
-                                    ...bc, assetId, txId
-                                });
-                            }
-                        } else {
-                            await this.log(LogLevel.warning, "Not tracked currency", assetAmount.currency);
-                        }
-                    } else {
-                        await this.log(LogLevel.warning, "No deliveredAmount", payment);
-                    }
+                    await this.log(LogLevel.error, "No deliveredAmount", payment);
                 }
             }
         }
@@ -169,7 +176,7 @@ export class RippleService {
         // mark expired operations as failed, if any
         for (let i = 0; i < presumablyExpired.length; i++) {
             const operation = await this.operationRepository.get(presumablyExpired[i])
-            if (!!operation && !operation.isCompleted() && !operation.isFailed()) {
+            if (!!operation && !operation.CompletionTime && !operation.FailTime) {
                 await this.operationRepository.update(operation.OperationId, {
                     errorCode: ErrorCode.buildingShouldBeRepeated,
                     error: "Transaction expired",

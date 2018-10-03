@@ -41,18 +41,6 @@ export class OperationEntity extends AzureEntity {
     Error: string;
     ErrorCode: ErrorCode;
     DeleteTime: Date;
-
-    isCompleted(): boolean {
-        return !!this.CompletionTime;
-    }
-
-    isFailed(): boolean {
-        return !!this.FailTime;
-    }
-
-    isSent(): boolean {
-        return !!this.SendTime;
-    }
 }
 
 export class OperationByExpirationEntity extends AzureEntity {
