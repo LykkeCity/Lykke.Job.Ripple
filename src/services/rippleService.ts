@@ -42,8 +42,17 @@ export class RippleService {
         }
 
         const params = await this.paramsRepository.get();
-        const lastProcessedLedger = (params && params.LastProcessedLedger) || 0;
+        const lastProcessedLedger = Number(params && params.LastProcessedLedger) || 0;
         const lastValidatedLedger = await this.api.getLedgerVersion();
+
+        if (lastProcessedLedger == lastValidatedLedger) {
+            // nothing to do here, all actions already processed
+            return {
+                lastProcessedLedger,
+                lastValidatedLedger
+            };
+        }
+
         const serverInfo = await this.api.getServerInfo();
         const availableHistory = serverInfo.completeLedgers.split(",").map(i => i.split("-"));
         
@@ -93,7 +102,7 @@ export class RippleService {
 
                     // upsert history of operation action
                     await this.historyRepository.upsert(operation.FromAddress, operation.ToAddress, operation.AssetId,
-                        operation.Amount, operation.AmountInBaseUnit, block, blockTime, txId, operation.RowKey, operationId);
+                        operation.Amount, operation.AmountInBaseUnit, block, blockTime, txId, "", operationId);
 
                     // set operation state to completed
                     await this.operationRepository.update(operationId, { completionTime: new Date(), blockTime, block });
@@ -130,7 +139,7 @@ export class RippleService {
 
                         // record history
                         await this.historyRepository.upsert(from, to, assetId, amount, amountInBaseUnit,
-                            block, blockTime, txId, operationId);
+                            block, blockTime, txId, "");
 
                         // record balance changes;
                         // actually source amount may be in another currency,
@@ -159,8 +168,8 @@ export class RippleService {
         }
 
         return {
-            lastProcessedLedger: lastProcessedLedger,
-            lastValidatedLedger: lastValidatedLedger
+            lastProcessedLedger,
+            lastValidatedLedger
         };
     }
 
