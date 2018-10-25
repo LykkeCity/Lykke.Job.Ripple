@@ -45,6 +45,11 @@ export class RippleService {
         const lastProcessedLedger = Number(params && params.LastProcessedLedger) || 0;
         const lastValidatedLedger = await this.api.getLedgerVersion();
 
+        this.log(LogLevel.info, "Params", {
+            lastProcessedLedger,
+            lastValidatedLedger
+        });
+
         if (lastProcessedLedger == lastValidatedLedger) {
             // nothing to do here, all actions already processed
             return {
@@ -55,6 +60,8 @@ export class RippleService {
 
         const serverInfo = await this.api.getServerInfo();
         const availableHistory = serverInfo.completeLedgers.split(",").map(i => i.split("-"));
+
+        this.log(LogLevel.info, "Server info", serverInfo);
         
         // there are must be an available interval of ledger 
         // history that contains our required interval
@@ -70,6 +77,8 @@ export class RippleService {
                 "payment"
             ]
         });
+
+        this.log(LogLevel.info, "History (ids)", history.map(h => h.id));
 
         for (const tx of history) {
             const block = tx.outcome.ledgerVersion * 10;
