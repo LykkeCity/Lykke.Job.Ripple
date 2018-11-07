@@ -53,6 +53,7 @@ export class Settings {
         LogSlackChannels: string[];
         Interval: number;
         HotWalletAddress: string;
+        Confirmations: number;
         Ripple: {
             Url: string;
         }

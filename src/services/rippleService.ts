@@ -44,7 +44,7 @@ export class RippleService {
         const params = await this.paramsRepository.get();
         const lastProcessedLedger = Number(params && params.LastProcessedLedger) || 0;
         const serverInfo = await this.api.getServerInfo();
-        const lastValidatedLedger = serverInfo.validatedLedger.ledgerVersion;
+        const lastValidatedLedger = serverInfo.validatedLedger.ledgerVersion - (this.settings.RippleJob.Confirmations || 0);
         const availableHistory = serverInfo.completeLedgers.split(",").map(i => i.split("-"));
 
         this.log(LogLevel.info, "Params", {
@@ -52,7 +52,7 @@ export class RippleService {
             lastValidatedLedger
         });
 
-        if (lastProcessedLedger == lastValidatedLedger) {
+        if (lastProcessedLedger >= lastValidatedLedger) {
             // nothing to do here, all actions already processed
             return {
                 lastProcessedLedger,
