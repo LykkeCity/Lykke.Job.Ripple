@@ -69,7 +69,7 @@ loadSettings()
                 const processedInterval = await ripple.handleActions();
                 await ripple.handleExpired(processedInterval);
             } catch (e) {
-                const context: any = {}
+                const context = {}
                 // if(e.inspect && typeof e.inspect=== 'function'){
                 //     context.inspect = e.inspect();
                 // }
