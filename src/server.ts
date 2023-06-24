@@ -70,15 +70,15 @@ loadSettings()
                 await ripple.handleExpired(processedInterval);
             } catch (e) {
                 const context: any = {}
-                if(e.inspect && typeof e.inspect=== 'function'){
-                    context.inspect = e.inspect();
-                }
-                if(e.toString && typeof e.toString=== 'function'){
-                    context.str = e.toString();
-                }
-                if(e.data){
-                    context.data = e.data;
-                }
+                // if(e.inspect && typeof e.inspect=== 'function'){
+                //     context.inspect = e.inspect();
+                // }
+                // if(e.toString && typeof e.toString=== 'function'){
+                //     context.str = e.toString();
+                // }
+                // if(e.data){
+                //     context.data = e.data;
+                // }
                 await log.write(LogLevel.error, RippleService.name, ripple.handleActions.name, e.message, JSON.stringify(context), e.name, e.stack);
                 error = e;
             }
