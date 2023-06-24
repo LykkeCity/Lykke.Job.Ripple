@@ -3,6 +3,7 @@ import interval from "interval-promise"
 import { loadSettings, APP_NAME, APP_VERSION, ENV_INFO, startAppInsights } from "./common";
 import { LogService, LogLevel } from "./services/logService";
 import { RippleService } from "./services/rippleService";
+import { RippledError } from "ripple-lib/dist/npm/common/errors";
 
 const jsonMime = "application/json; charset=utf-8";
 
@@ -69,7 +70,15 @@ loadSettings()
                 const processedInterval = await ripple.handleActions();
                 await ripple.handleExpired(processedInterval);
             } catch (e) {
-                await log.write(LogLevel.error, RippleService.name, ripple.handleActions.name, e.message, undefined, e.name, e.stack);
+                console.log(e)
+                const context: any= {}
+                if (e instanceof RippledError){
+                    context.inspect = e.inspect()
+                    context.toStr = e.toString()
+                    context.data = e.data;
+                }
+                await log.write(LogLevel.error, RippleService.name, ripple.handleActions.name, e.message, JSON.stringify(context), e.name, e.stack);
+
                 error = e;
             }
         };
