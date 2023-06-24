@@ -3,7 +3,15 @@ import interval from "interval-promise"
 import { loadSettings, APP_NAME, APP_VERSION, ENV_INFO, startAppInsights } from "./common";
 import { LogService, LogLevel } from "./services/logService";
 import { RippleService } from "./services/rippleService";
-import { RippledError } from "ripple-lib/dist/npm/common/errors";
+
+declare class RippleError extends Error {
+    name: string;
+    message: string;
+    data?: any;
+    constructor(message?: string, data?: any);
+    toString(): string;
+    inspect(): string;
+}
 
 const jsonMime = "application/json; charset=utf-8";
 
@@ -72,7 +80,7 @@ loadSettings()
             } catch (e) {
                 console.log(e)
                 const context: any= {}
-                if (e instanceof RippledError){
+                if (e instanceof RippleError){
                     context.inspect = e.inspect()
                     context.toStr = e.toString()
                     context.data = e.data;
