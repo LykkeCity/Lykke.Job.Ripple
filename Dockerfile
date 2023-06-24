@@ -1,4 +1,4 @@
-FROM node:10-alpine
+FROM node:8-alpine
 ENV NODE_ENV production
 ARG version=1.0.0
 WORKDIR /usr/src/ripple-job
