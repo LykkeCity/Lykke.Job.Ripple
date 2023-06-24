@@ -79,7 +79,7 @@ loadSettings()
                 if(e.data){
                     context.data = e.data;
                 }
-                await log.write(LogLevel.error, RippleService.name, ripple.handleActions.name, e.message, undefined, e.name, e.stack);
+                await log.write(LogLevel.error, RippleService.name, ripple.handleActions.name, e.message, JSON.stringify(context), e.name, e.stack);
                 error = e;
             }
         };
