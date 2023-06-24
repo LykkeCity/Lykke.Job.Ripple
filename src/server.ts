@@ -3,7 +3,6 @@ import interval from "interval-promise"
 import { loadSettings, APP_NAME, APP_VERSION, ENV_INFO, startAppInsights } from "./common";
 import { LogService, LogLevel } from "./services/logService";
 import { RippleService } from "./services/rippleService";
-import {RippleError} from "ripple-lib/dist/npm/common/errors";
 
 const jsonMime = "application/json; charset=utf-8";
 
