@@ -4,7 +4,7 @@ ARG version=1.0.0
 WORKDIR /usr/src/ripple-job
 COPY . .
 RUN npm version ${version}
-RUN npm install typescript -g
+RUN npm install -g typescript@3.8
 RUN npm install --production --silent
 RUN tsc
 EXPOSE 5000
