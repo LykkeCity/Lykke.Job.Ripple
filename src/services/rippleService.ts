@@ -72,7 +72,8 @@ export class RippleService {
             earliestFirst: true,
             types: [
                 "payment"
-            ]
+            ],
+            limit: 100
         });
 
         this.log(LogLevel.info, "History (ids)", history.map(h => h.id));
